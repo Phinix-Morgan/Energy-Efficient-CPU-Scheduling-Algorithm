@@ -1,0 +1,3311 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>EcoScheduler – Energy-Efficient CPU Scheduling</title>
+        <style>
+            /* ── Reset & Base ── */
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                /* Dark Coffee & Sky Theme */
+                --bg: #14110f; /* Deep Espresso / Almost Black */
+                --surface: #221d1a; /* Dark Coffee */
+                --surface2: #362e29; /* Mocha */
+                --border: #4a4039; /* Mid-Brown */
+                --accent: #5b9cd9; /* Sky Blue */
+                --accent2: #4a7c59; /* Earthy Green */
+                --accent3: #d95c50; /* Warm Brick/Rust */
+                --accent4: #cfa276; /* Light Golden Brown / Dark Beige */
+                --accent5: #86a8cc; /* Muted Steel Blue */
+                --text: #f4efe6; /* Cream / Soft Beige (High contrast) */
+                --muted: #a69a8f; /* Tan / Taupe */
+                --warn: #cfa276;
+                --danger: #d95c50;
+
+                /* Semantic Task Colors */
+                --rt-color: #d95c50; /* Real-Time: Rust */
+                --int-color: #5b9cd9; /* Interactive: Blue */
+                --bg-color: #cfa276; /* Background: Golden Beige */
+                --idle-color: #5a504a; /* Idle: Muted Brown */
+            }
+
+            body {
+                font-family: "Segoe UI", system-ui, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                min-height: 100vh;
+                overflow-x: hidden;
+            }
+
+            /* ── Header ── */
+            header {
+                background: rgba(34, 29, 26, 0.85);
+                border-bottom: 1px solid var(--border);
+                padding: 24px 32px;
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                backdrop-filter: blur(12px);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            }
+
+            .logo {
+                width: 48px;
+                height: 48px;
+                background: linear-gradient(135deg, #1e5fae, #5b9cd9);
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 22px;
+                color: #ffffff;
+                box-shadow: 0 4px 15px rgba(91, 156, 217, 0.2);
+                flex-shrink: 0;
+            }
+
+            header h1 {
+                font-size: 1.5rem;
+                font-weight: 800;
+                color: var(--text);
+                letter-spacing: -0.02em;
+            }
+            header p {
+                font-size: 0.8rem;
+                color: var(--muted);
+                margin-top: 2px;
+                font-weight: 500;
+            }
+
+            .header-badges {
+                margin-left: auto;
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .badge {
+                padding: 4px 10px;
+                border-radius: 20px;
+                font-size: 0.7rem;
+                font-weight: 700;
+                letter-spacing: 0.03em;
+            }
+            .badge-blue {
+                background: rgba(91, 156, 217, 0.15);
+                color: var(--accent);
+                border: 1px solid rgba(91, 156, 217, 0.3);
+            }
+            .badge-green {
+                background: rgba(207, 162, 118, 0.15);
+                color: var(--bg-color);
+                border: 1px solid rgba(207, 162, 118, 0.3);
+            }
+            .badge-purple {
+                background: rgba(217, 92, 80, 0.15);
+                color: var(--rt-color);
+                border: 1px solid rgba(217, 92, 80, 0.3);
+            }
+
+            /* ── Layout ── */
+            .main-grid {
+                display: grid;
+                grid-template-columns: 280px 1fr;
+                grid-template-rows: auto;
+                gap: 0;
+                min-height: calc(100vh - 97px);
+            }
+
+            /* ── Sidebar ── */
+            aside {
+                background: var(--surface);
+                border-right: 1px solid var(--border);
+                padding: 20px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                position: sticky;
+                top: 97px;
+                height: calc(100vh - 97px);
+                overflow-y: auto;
+            }
+
+            .sidebar-title {
+                font-size: 0.65rem;
+                font-weight: 800;
+                color: var(--muted);
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                padding: 8px 8px 4px;
+                margin-top: 8px;
+            }
+
+            .sidebar-title:first-child {
+                margin-top: 0;
+            }
+
+            .nav-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 10px;
+                border-radius: 8px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                cursor: pointer;
+                color: var(--muted);
+                transition: all 0.15s;
+                border: 1px solid transparent;
+            }
+
+            .nav-item:hover {
+                background: var(--surface2);
+                color: var(--text);
+            }
+            .nav-item.active {
+                background: rgba(91, 156, 217, 0.1);
+                color: var(--accent);
+                border-color: rgba(91, 156, 217, 0.2);
+            }
+
+            .nav-icon {
+                font-size: 14px;
+                width: 18px;
+                text-align: center;
+            }
+
+            /* ── Content ── */
+            .content {
+                padding: 28px 32px;
+                overflow-y: auto;
+            }
+
+            /* ── Section ── */
+            .section {
+                display: none;
+                animation: fadeIn 0.25s ease;
+            }
+            .section.active {
+                display: block;
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            .section-header {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .section-icon {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+            }
+
+            .section-header h2 {
+                font-size: 1.25rem;
+                font-weight: 800;
+                color: var(--text);
+            }
+            .section-header p {
+                font-size: 0.8rem;
+                color: var(--muted);
+                margin-top: 2px;
+                font-weight: 500;
+            }
+
+            /* ── Cards ── */
+            .card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 16px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            }
+
+            .card-title {
+                font-size: 0.85rem;
+                font-weight: 800;
+                color: var(--text);
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .grid-2 {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+            }
+            .grid-3 {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 16px;
+            }
+
+            /* ── Stat boxes ── */
+            .stat-box {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 16px;
+                text-align: center;
+            }
+
+            .stat-value {
+                font-size: 2rem;
+                font-weight: 800;
+                color: var(--accent);
+                line-height: 1;
+            }
+
+            .stat-label {
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: var(--muted);
+                margin-top: 6px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+            /* ── Controls ── */
+            .controls {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                align-items: center;
+                margin-bottom: 20px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px 20px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            }
+
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .control-group label {
+                font-size: 0.7rem;
+                color: var(--muted);
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            select,
+            input[type="range"],
+            input[type="number"] {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 7px;
+                color: var(--text);
+                padding: 6px 10px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+
+            select:focus,
+            input:focus {
+                border-color: var(--accent);
+            }
+
+            input[type="range"] {
+                padding: 4px 0;
+                width: 120px;
+                accent-color: var(--accent);
+            }
+
+            .btn {
+                padding: 8px 18px;
+                border-radius: 8px;
+                border: none;
+                font-weight: 700;
+                font-size: 0.82rem;
+                cursor: pointer;
+                transition: all 0.15s;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .btn-primary {
+                background: var(--accent);
+                color: #ffffff;
+            }
+            .btn-primary:hover {
+                background: #4a8ac2;
+            }
+            .btn-success {
+                background: var(--bg-color);
+                color: #ffffff;
+            }
+            .btn-success:hover {
+                background: #ba9169;
+            }
+            .btn-danger {
+                background: var(--danger);
+                color: #ffffff;
+            }
+            .btn-danger:hover {
+                background: #c24d42;
+            }
+            .btn-secondary {
+                background: var(--surface2);
+                color: var(--text);
+                border: 1px solid var(--border);
+            }
+            .btn-secondary:hover {
+                background: var(--border);
+            }
+
+            /* ── Gantt Chart ── */
+            .gantt-wrap {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 16px;
+                overflow-x: auto;
+                margin-bottom: 16px;
+            }
+
+            .gantt-labels {
+                display: flex;
+                gap: 0;
+            }
+
+            .gantt-core-label {
+                width: 70px;
+                flex-shrink: 0;
+                font-size: 0.7rem;
+                color: var(--muted);
+                font-weight: 700;
+            }
+
+            .gantt-timeline {
+                position: relative;
+                flex: 1;
+            }
+
+            .gantt-row {
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
+                gap: 0;
+            }
+
+            .gantt-core-name {
+                width: 70px;
+                flex-shrink: 0;
+                font-size: 0.72rem;
+                color: var(--text);
+                font-weight: 700;
+            }
+
+            .gantt-bar-row {
+                flex: 1;
+                height: 32px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 6px;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .gantt-bar {
+                position: absolute;
+                height: 100%;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                padding: 0 6px;
+                font-size: 0.65rem;
+                font-weight: 700;
+                white-space: nowrap;
+                overflow: hidden;
+                cursor: pointer;
+                transition: opacity 0.1s;
+                color: #ffffff;
+            }
+
+            .gantt-bar:hover {
+                opacity: 0.85;
+            }
+
+            .gantt-tick-row {
+                display: flex;
+                margin-left: 70px;
+                margin-bottom: 4px;
+            }
+
+            .gantt-tick {
+                flex: 1;
+                font-size: 0.65rem;
+                font-weight: 600;
+                color: var(--muted);
+                text-align: center;
+                border-left: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 2px 0;
+            }
+
+            /* ── Task Queue Visual ── */
+            .queue-visual {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                max-height: 260px;
+                overflow-y: auto;
+                padding-right: 4px;
+            }
+
+            .task-pill {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 0.75rem;
+                border: 1px solid var(--border);
+                background: var(--surface2);
+                transition: all 0.2s;
+            }
+
+            .task-pill-type {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+
+            .task-pill-name {
+                font-weight: 700;
+                flex: 1;
+            }
+            .task-pill-info {
+                color: var(--muted);
+                font-size: 0.68rem;
+                font-weight: 600;
+            }
+
+            .task-pill.running {
+                border-color: var(--accent);
+                background: rgba(91, 156, 217, 0.1);
+                box-shadow: 0 0 10px rgba(91, 156, 217, 0.2);
+            }
+
+            .task-pill.completed {
+                opacity: 0.4;
+                background: var(--bg);
+            }
+
+            /* ── Progress Bar ── */
+            .progress-bar {
+                height: 6px;
+                background: var(--surface2);
+                border-radius: 4px;
+                overflow: hidden;
+                margin-top: 4px;
+            }
+
+            .progress-fill {
+                height: 100%;
+                border-radius: 4px;
+                background: var(--accent);
+                transition: width 0.3s;
+            }
+
+            /* ── DVFS Chart ── */
+            canvas {
+                border-radius: 8px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+            }
+
+            /* ── C-State Table ── */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.8rem;
+            }
+            th {
+                background: var(--bg);
+                color: var(--muted);
+                font-size: 0.68rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                padding: 10px 14px;
+                text-align: left;
+                border-bottom: 2px solid var(--border);
+            }
+            td {
+                padding: 9px 14px;
+                border-top: 1px solid var(--border);
+                font-weight: 500;
+            }
+            tr:hover td {
+                background: rgba(255, 255, 255, 0.03);
+            }
+
+            .tag {
+                padding: 3px 8px;
+                border-radius: 6px;
+                font-size: 0.65rem;
+                font-weight: 800;
+            }
+
+            .tag-rt {
+                background: rgba(217, 92, 80, 0.2);
+                color: var(--rt-color);
+            }
+            .tag-int {
+                background: rgba(91, 156, 217, 0.2);
+                color: var(--int-color);
+            }
+            .tag-bg {
+                background: rgba(207, 162, 118, 0.2);
+                color: var(--bg-color);
+            }
+            .tag-good {
+                background: rgba(207, 162, 118, 0.2);
+                color: var(--bg-color);
+            }
+            .tag-bad {
+                background: rgba(217, 92, 80, 0.2);
+                color: var(--danger);
+            }
+            .tag-warn {
+                background: rgba(207, 162, 118, 0.1);
+                color: var(--text);
+            }
+
+            /* ── Log Panel ── */
+            .log-panel {
+                background: #0f0d0c; /* Deepest brown/black for console feel */
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 14px 16px;
+                font-family:
+                    "Cascadia Code", "JetBrains Mono", "Fira Code", monospace;
+                font-size: 0.72rem;
+                font-weight: 500;
+                line-height: 1.7;
+                height: 200px;
+                overflow-y: auto;
+                box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4);
+            }
+
+            .log-info {
+                color: var(--accent);
+            }
+            .log-warn {
+                color: var(--warn);
+            }
+            .log-error {
+                color: var(--danger);
+            }
+            .log-ok {
+                color: #8cba92; /* softer green for console ok */
+            }
+            .log-dim {
+                color: var(--muted);
+            }
+
+            /* ── Architecture diagram ── */
+            .arch-diagram {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 20px;
+                font-family: "Cascadia Code", "Fira Code", monospace;
+                font-size: 0.75rem;
+                font-weight: 600;
+                line-height: 1.8;
+                color: var(--text);
+                white-space: pre;
+                overflow-x: auto;
+            }
+
+            /* ── Energy Meter ── */
+            .energy-meter {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .meter-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .meter-label {
+                width: 70px;
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: var(--text);
+            }
+            .meter-bar {
+                flex: 1;
+                height: 14px;
+                background: var(--surface2);
+                border-radius: 7px;
+                overflow: hidden;
+            }
+
+            .meter-fill {
+                height: 100%;
+                border-radius: 7px;
+                transition: width 0.5s ease;
+            }
+
+            .meter-val {
+                width: 70px;
+                font-size: 0.72rem;
+                text-align: right;
+                font-weight: 700;
+            }
+
+            /* ── Tooltip ── */
+            .tooltip {
+                position: fixed;
+                z-index: 999;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 12px 16px;
+                font-size: 0.75rem;
+                pointer-events: none;
+                max-width: 220px;
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+                display: none;
+                color: var(--text);
+            }
+
+            .tooltip.visible {
+                display: block;
+            }
+            .tooltip-title {
+                font-weight: 800;
+                color: var(--text);
+                margin-bottom: 6px;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 4px;
+            }
+            .tooltip-row {
+                display: flex;
+                justify-content: space-between;
+                gap: 16px;
+                color: var(--muted);
+                margin-bottom: 2px;
+                font-weight: 600;
+            }
+            .tooltip-val {
+                color: var(--text);
+                font-weight: 700;
+            }
+
+            /* ── Scrollbar ── */
+            ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: var(--idle-color);
+            }
+
+            /* ── Responsive ── */
+            @media (max-width: 768px) {
+                .main-grid {
+                    grid-template-columns: 1fr;
+                }
+                aside {
+                    position: relative;
+                    top: 0;
+                    height: auto;
+                    flex-direction: row;
+                    flex-wrap: wrap;
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                }
+                .grid-2,
+                .grid-3 {
+                    grid-template-columns: 1fr;
+                }
+                header {
+                    padding: 14px 16px;
+                }
+                .content {
+                    padding: 16px;
+                }
+                .header-badges {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <div class="logo">⚡</div>
+            <div>
+                <h1>EcoScheduler</h1>
+                <p>
+                    Energy-Efficient CPU Scheduling for Mobile &amp; Embedded
+                    Systems
+                </p>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-blue">DVFS Enabled</span>
+                <span class="badge badge-green">C-State Aware</span>
+                <span class="badge badge-purple">EDF + RR Hybrid</span>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <aside>
+                <div class="sidebar-title">Simulator</div>
+                <div class="nav-item active" onclick="showSection('dashboard')">
+                    <span class="nav-icon">📊</span> Dashboard
+                </div>
+                <div class="nav-item" onclick="showSection('scheduler')">
+                    <span class="nav-icon">⚙️</span> Live Scheduler
+                </div>
+                <div class="nav-item" onclick="showSection('gantt')">
+                    <span class="nav-icon">📅</span> Gantt Chart
+                </div>
+
+                <div class="sidebar-title">Analysis</div>
+                <div class="nav-item" onclick="showSection('dvfs')">
+                    <span class="nav-icon">🔋</span> DVFS Governor
+                </div>
+                <div class="nav-item" onclick="showSection('cstate')">
+                    <span class="nav-icon">💤</span> C-State Analysis
+                </div>
+                <div class="nav-item" onclick="showSection('energy')">
+                    <span class="nav-icon">⚡</span> Energy Monitor
+                </div>
+
+                <div class="sidebar-title">Reference</div>
+                <div class="nav-item" onclick="showSection('architecture')">
+                    <span class="nav-icon">🏗️</span> Architecture
+                </div>
+                <div class="nav-item" onclick="showSection('algorithm')">
+                    <span class="nav-icon">🧮</span> Algorithm
+                </div>
+
+                <div
+                    style="
+                        margin-top: auto;
+                        padding-top: 16px;
+                        border-top: 1px solid var(--border);
+                    "
+                >
+                    <div
+                        style="
+                            font-size: 0.68rem;
+                            color: var(--muted);
+                            padding: 8px;
+                            font-weight: 600;
+                        "
+                    >
+                        EcoScheduler v2.0<br />
+                        Hybrid EDF + Energy-Aware RR
+                    </div>
+                </div>
+            </aside>
+
+            <main class="content">
+                <section id="sec-dashboard" class="section active">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(91, 156, 217, 0.15);
+                                color: var(--accent);
+                            "
+                        >
+                            📊
+                        </div>
+                        <div>
+                            <h2>Dashboard</h2>
+                            <p>
+                                Real-time system metrics and scheduling overview
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="grid-3" style="margin-bottom: 16px">
+                        <div class="stat-box">
+                            <div
+                                class="stat-value"
+                                id="stat-completed"
+                                style="color: var(--text)"
+                            >
+                                0
+                            </div>
+                            <div class="stat-label">Tasks Completed</div>
+                        </div>
+                        <div class="stat-box">
+                            <div
+                                class="stat-value"
+                                id="stat-energy"
+                                style="color: var(--bg-color)"
+                            >
+                                0
+                            </div>
+                            <div class="stat-label">Total Energy (mJ)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div
+                                class="stat-value"
+                                id="stat-misses"
+                                style="color: var(--rt-color)"
+                            >
+                                0
+                            </div>
+                            <div class="stat-label">Deadline Misses</div>
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="card">
+                            <div class="card-title">⚡ Per-Core Status</div>
+                            <div id="core-status-list"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">📋 Queue Depths</div>
+                            <div
+                                style="
+                                    display: flex;
+                                    flex-direction: column;
+                                    gap: 14px;
+                                    margin-top: 4px;
+                                "
+                            >
+                                <div>
+                                    <div
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            font-size: 0.75rem;
+                                            margin-bottom: 4px;
+                                        "
+                                    >
+                                        <span
+                                            style="
+                                                color: var(--rt-color);
+                                                font-weight: 800;
+                                            "
+                                            >● Real-Time Queue</span
+                                        >
+                                        <span
+                                            id="q-rt-count"
+                                            style="
+                                                font-weight: 600;
+                                                color: var(--muted);
+                                            "
+                                            >0 tasks</span
+                                        >
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div
+                                            class="progress-fill"
+                                            id="q-rt-bar"
+                                            style="
+                                                width: 0%;
+                                                background: var(--rt-color);
+                                            "
+                                        ></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            font-size: 0.75rem;
+                                            margin-bottom: 4px;
+                                        "
+                                    >
+                                        <span
+                                            style="
+                                                color: var(--int-color);
+                                                font-weight: 800;
+                                            "
+                                            >● Interactive Queue</span
+                                        >
+                                        <span
+                                            id="q-int-count"
+                                            style="
+                                                font-weight: 600;
+                                                color: var(--muted);
+                                            "
+                                            >0 tasks</span
+                                        >
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div
+                                            class="progress-fill"
+                                            id="q-int-bar"
+                                            style="
+                                                width: 0%;
+                                                background: var(--int-color);
+                                            "
+                                        ></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            font-size: 0.75rem;
+                                            margin-bottom: 4px;
+                                        "
+                                    >
+                                        <span
+                                            style="
+                                                color: var(--bg-color);
+                                                font-weight: 800;
+                                            "
+                                            >● Background Queue</span
+                                        >
+                                        <span
+                                            id="q-bg-count"
+                                            style="
+                                                font-weight: 600;
+                                                color: var(--muted);
+                                            "
+                                            >0 tasks</span
+                                        >
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div
+                                            class="progress-fill"
+                                            id="q-bg-bar"
+                                            style="
+                                                width: 0%;
+                                                background: var(--bg-color);
+                                            "
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 16px">
+                                <div class="card-title">📈 Avg Metrics</div>
+                                <div class="grid-2" style="margin-top: 8px">
+                                    <div style="font-size: 0.75rem">
+                                        <div
+                                            style="
+                                                color: var(--muted);
+                                                font-weight: 700;
+                                            "
+                                        >
+                                            Avg Turnaround
+                                        </div>
+                                        <div
+                                            style="
+                                                font-weight: 800;
+                                                font-size: 1rem;
+                                                color: var(--text);
+                                            "
+                                            id="avg-turn"
+                                        >
+                                            —
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 0.75rem">
+                                        <div
+                                            style="
+                                                color: var(--muted);
+                                                font-weight: 700;
+                                            "
+                                        >
+                                            Avg Wait Time
+                                        </div>
+                                        <div
+                                            style="
+                                                font-weight: 800;
+                                                font-size: 1rem;
+                                                color: var(--text);
+                                            "
+                                            id="avg-wait"
+                                        >
+                                            —
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">📜 System Log</div>
+                        <div class="log-panel" id="log-panel">
+                            <span class="log-dim"
+                                >// EcoScheduler initialized — run the Live
+                                Scheduler to begin</span
+                            >
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec-scheduler" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(207, 162, 118, 0.15);
+                                color: var(--bg-color);
+                            "
+                        >
+                            ⚙️
+                        </div>
+                        <div>
+                            <h2>Live Scheduler</h2>
+                            <p>
+                                Configure and run the scheduling simulation step
+                                by step
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="controls">
+                        <div class="control-group">
+                            <label>CPU Cores</label>
+                            <select id="cfg-cores">
+                                <option>1</option>
+                                <option>2</option>
+                                <option selected>4</option>
+                                <option>6</option>
+                                <option>8</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Power Profile</label>
+                            <select id="cfg-profile">
+                                <option value="PERFORMANCE">Performance</option>
+                                <option value="BALANCED" selected>
+                                    Balanced
+                                </option>
+                                <option value="POWER_SAVE">Power Save</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Time Quantum (ms)</label>
+                            <select id="cfg-quantum">
+                                <option value="5">5 ms</option>
+                                <option value="10" selected>10 ms</option>
+                                <option value="20">20 ms</option>
+                                <option value="50">50 ms</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Num Tasks</label>
+                            <input
+                                type="number"
+                                id="cfg-tasks"
+                                value="15"
+                                min="5"
+                                max="40"
+                                style="width: 70px"
+                            />
+                        </div>
+                        <div class="control-group">
+                            <label>Sim Speed</label>
+                            <input
+                                type="range"
+                                id="cfg-speed"
+                                min="1"
+                                max="10"
+                                value="5"
+                            />
+                        </div>
+                        <button
+                            class="btn btn-success"
+                            onclick="startSimulation()"
+                        >
+                            ▶ Run
+                        </button>
+                        <button
+                            class="btn btn-danger"
+                            onclick="stopSimulation()"
+                        >
+                            ■ Stop
+                        </button>
+                        <button
+                            class="btn btn-secondary"
+                            onclick="resetSimulation()"
+                        >
+                            ↺ Reset
+                        </button>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="card" style="margin-bottom: 0">
+                            <div class="card-title">📋 Task Queue</div>
+                            <div class="queue-visual" id="task-queue-vis"></div>
+                        </div>
+                        <div class="card" style="margin-bottom: 0">
+                            <div class="card-title">🖥️ Core Activity</div>
+                            <div id="core-activity"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec-gantt" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(134, 168, 204, 0.15);
+                                color: var(--accent5);
+                            "
+                        >
+                            📅
+                        </div>
+                        <div>
+                            <h2>Gantt Chart</h2>
+                            <p>
+                                Visual timeline of task execution across all
+                                cores
+                            </p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">
+                            Execution Timeline
+                            <span
+                                style="
+                                    color: var(--muted);
+                                    font-size: 0.7rem;
+                                    font-weight: 500;
+                                "
+                                >(hover bars for details)</span
+                            >
+                        </div>
+                        <div class="gantt-wrap" id="gantt-container">
+                            <div
+                                style="
+                                    color: var(--muted);
+                                    font-size: 0.8rem;
+                                    font-weight: 600;
+                                "
+                            >
+                                Run the scheduler to generate Gantt chart data.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">📊 Legend</div>
+                        <div style="display: flex; gap: 20px; flex-wrap: wrap">
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 6px;
+                                    font-size: 0.78rem;
+                                    font-weight: 600;
+                                "
+                            >
+                                <div
+                                    style="
+                                        width: 16px;
+                                        height: 16px;
+                                        border-radius: 4px;
+                                        background: var(--rt-color);
+                                    "
+                                ></div>
+                                Real-Time
+                            </div>
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 6px;
+                                    font-size: 0.78rem;
+                                    font-weight: 600;
+                                "
+                            >
+                                <div
+                                    style="
+                                        width: 16px;
+                                        height: 16px;
+                                        border-radius: 4px;
+                                        background: var(--int-color);
+                                    "
+                                ></div>
+                                Interactive
+                            </div>
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 6px;
+                                    font-size: 0.78rem;
+                                    font-weight: 600;
+                                "
+                            >
+                                <div
+                                    style="
+                                        width: 16px;
+                                        height: 16px;
+                                        border-radius: 4px;
+                                        background: var(--bg-color);
+                                    "
+                                ></div>
+                                Background
+                            </div>
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 6px;
+                                    font-size: 0.78rem;
+                                    font-weight: 600;
+                                "
+                            >
+                                <div
+                                    style="
+                                        width: 16px;
+                                        height: 16px;
+                                        border-radius: 4px;
+                                        background: var(--idle-color);
+                                    "
+                                ></div>
+                                Idle / C-State
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec-dvfs" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(207, 162, 118, 0.15);
+                                color: var(--bg-color);
+                            "
+                        >
+                            🔋
+                        </div>
+                        <div>
+                            <h2>DVFS Governor</h2>
+                            <p>
+                                Dynamic Voltage &amp; Frequency Scaling — energy
+                                vs performance tradeoffs
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            Frequency Selection by Utilization
+                        </div>
+                        <canvas
+                            id="dvfs-canvas"
+                            width="800"
+                            height="300"
+                        ></canvas>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="card">
+                            <div class="card-title">
+                                ⚡ DVFS Operating Points
+                            </div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Freq (MHz)</th>
+                                        <th>Voltage (mV)</th>
+                                        <th>Power (mW)</th>
+                                        <th>Efficiency</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dvfs-table-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">📐 Energy Model</div>
+                            <div
+                                style="
+                                    font-family: monospace;
+                                    font-size: 0.8rem;
+                                    line-height: 2;
+                                    color: var(--text);
+                                "
+                            >
+                                <div
+                                    style="
+                                        color: var(--muted);
+                                        font-weight: 700;
+                                        margin-bottom: 8px;
+                                    "
+                                >
+                                    Dynamic power scaling law:
+                                </div>
+                                <div
+                                    style="
+                                        background: var(--bg);
+                                        padding: 10px;
+                                        border-radius: 8px;
+                                        margin-bottom: 10px;
+                                        border: 1px solid var(--border);
+                                        font-weight: 600;
+                                    "
+                                >
+                                    P<sub>dyn</sub> = α · C · V² · f
+                                </div>
+                                <div
+                                    style="
+                                        color: var(--muted);
+                                        font-weight: 700;
+                                        margin-bottom: 8px;
+                                    "
+                                >
+                                    Energy-delay product:
+                                </div>
+                                <div
+                                    style="
+                                        background: var(--bg);
+                                        padding: 10px;
+                                        border-radius: 8px;
+                                        margin-bottom: 10px;
+                                        border: 1px solid var(--border);
+                                        font-weight: 600;
+                                    "
+                                >
+                                    E = P · t = k·f² · (W/f) = k·f·W
+                                </div>
+                                <div
+                                    style="
+                                        color: var(--muted);
+                                        font-weight: 700;
+                                        margin-bottom: 8px;
+                                    "
+                                >
+                                    Optimal frequency (EDP):
+                                </div>
+                                <div
+                                    style="
+                                        background: var(--bg);
+                                        padding: 10px;
+                                        border-radius: 8px;
+                                        border: 1px solid var(--border);
+                                        font-weight: 600;
+                                    "
+                                >
+                                    f<sub>opt</sub> ∝ ∛(workload / η)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec-cstate" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(207, 162, 118, 0.15);
+                                color: var(--warn);
+                            "
+                        >
+                            💤
+                        </div>
+                        <div>
+                            <h2>C-State Analysis</h2>
+                            <p>
+                                Break-even idle duration for each CPU power
+                                state
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            Break-Even Analysis — Net Energy Savings (mJ)
+                        </div>
+                        <canvas
+                            id="cstate-canvas"
+                            width="800"
+                            height="280"
+                        ></canvas>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">C-State Decision Table</div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>C-State</th>
+                                    <th>Power (mW)</th>
+                                    <th>Wake Latency</th>
+                                    <th>Wake Cost (mJ)</th>
+                                    <th>Break-Even (ms)</th>
+                                    <th>Recommendation</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>C0 Active</strong></td>
+                                    <td>1200</td>
+                                    <td>—</td>
+                                    <td>—</td>
+                                    <td>—</td>
+                                    <td>
+                                        <span class="tag tag-warn"
+                                            >Baseline</span
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>C1 Halt</strong></td>
+                                    <td>800</td>
+                                    <td>~1 µs</td>
+                                    <td>0.1 mJ</td>
+                                    <td>~0.25 ms</td>
+                                    <td>
+                                        <span class="tag tag-good"
+                                            >Always beneficial</span
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>C2 Sleep</strong></td>
+                                    <td>200</td>
+                                    <td>~10 µs</td>
+                                    <td>0.5 mJ</td>
+                                    <td>~0.5 ms</td>
+                                    <td>
+                                        <span class="tag tag-good"
+                                            >Idle &gt; 1 ms</span
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>C3 Deep Sleep</strong></td>
+                                    <td>50</td>
+                                    <td>~100 µs</td>
+                                    <td>2.0 mJ</td>
+                                    <td>~1.7 ms</td>
+                                    <td>
+                                        <span class="tag tag-good"
+                                            >Idle &gt; 2 ms</span
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="sec-energy" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(217, 92, 80, 0.15);
+                                color: var(--rt-color);
+                            "
+                        >
+                            ⚡
+                        </div>
+                        <div>
+                            <h2>Energy Monitor</h2>
+                            <p>
+                                Per-core and per-task energy consumption
+                                breakdown
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            Per-Core Energy Consumption
+                        </div>
+                        <div class="energy-meter" id="energy-meter"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            Energy vs Frequency — Task Simulation
+                        </div>
+                        <canvas
+                            id="energy-canvas"
+                            width="800"
+                            height="260"
+                        ></canvas>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            📋 Completed Task Energy Log
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Type</th>
+                                    <th>Burst (ms)</th>
+                                    <th>Freq (MHz)</th>
+                                    <th>Energy (mJ)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="energy-log-table"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="sec-architecture" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(134, 168, 204, 0.15);
+                                color: var(--accent5);
+                            "
+                        >
+                            🏗️
+                        </div>
+                        <div>
+                            <h2>Architecture</h2>
+                            <p>System components and data flow diagram</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            System Architecture Diagram
+                        </div>
+                        <div class="arch-diagram" id="arch-diagram"></div>
+                    </div>
+
+                    <div class="grid-3">
+                        <div class="card">
+                            <div
+                                class="card-title"
+                                style="color: var(--rt-color)"
+                            >
+                                🔴 Real-Time Tasks
+                            </div>
+                            <div
+                                style="
+                                    font-size: 0.78rem;
+                                    line-height: 1.8;
+                                    color: var(--muted);
+                                    font-weight: 600;
+                                "
+                            >
+                                <div>
+                                    • Algorithm:
+                                    <strong style="color: var(--text)"
+                                        >EDF</strong
+                                    >
+                                </div>
+                                <div>• Deadline guaranteed</div>
+                                <div>• Freq scaled for deadline</div>
+                                <div>• Preempts all others</div>
+                                <div>• Slack-based DVFS</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div
+                                class="card-title"
+                                style="color: var(--int-color)"
+                            >
+                                🔵 Interactive Tasks
+                            </div>
+                            <div
+                                style="
+                                    font-size: 0.78rem;
+                                    line-height: 1.8;
+                                    color: var(--muted);
+                                    font-weight: 600;
+                                "
+                            >
+                                <div>
+                                    • Algorithm:
+                                    <strong style="color: var(--text)"
+                                        >Priority RR</strong
+                                    >
+                                </div>
+                                <div>• Soft deadline</div>
+                                <div>• Energy-aware freq</div>
+                                <div>• Aging prevents starvation</div>
+                                <div>• Balanced DVFS</div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div
+                                class="card-title"
+                                style="color: var(--bg-color)"
+                            >
+                                🟤 Background Tasks
+                            </div>
+                            <div
+                                style="
+                                    font-size: 0.78rem;
+                                    line-height: 1.8;
+                                    color: var(--muted);
+                                    font-weight: 600;
+                                "
+                            >
+                                <div>
+                                    • Algorithm:
+                                    <strong style="color: var(--text)"
+                                        >Deferred FIFO</strong
+                                    >
+                                </div>
+                                <div>• No deadline</div>
+                                <div>• Minimum frequency</div>
+                                <div>• Run only when idle</div>
+                                <div>• Max energy savings</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="sec-algorithm" class="section">
+                    <div class="section-header">
+                        <div
+                            class="section-icon"
+                            style="
+                                background: rgba(91, 156, 217, 0.15);
+                                color: var(--accent);
+                            "
+                        >
+                            🧮
+                        </div>
+                        <div>
+                            <h2>Algorithm Reference</h2>
+                            <p>Pseudocode, complexity, and design decisions</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            📐 Scheduling Decision Flowchart
+                        </div>
+                        <div class="arch-diagram" id="algo-flow"></div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="card">
+                            <div class="card-title">⏱ Complexity Analysis</div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Operation</th>
+                                        <th>Complexity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Schedule decision</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(log n)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>DVFS selection</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(1)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Core selection</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(k)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Aging check</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(n)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>C-state selection</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(1)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Energy prediction</td>
+                                        <td>
+                                            <code
+                                                style="
+                                                    color: var(--accent);
+                                                    font-weight: 700;
+                                                "
+                                                >O(1)</code
+                                            >
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">
+                                🏆 Key Design Decisions
+                            </div>
+                            <div
+                                style="
+                                    font-size: 0.78rem;
+                                    line-height: 2;
+                                    color: var(--muted);
+                                    font-weight: 600;
+                                "
+                            >
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Task Packing</strong
+                                    >
+                                    — saves 15–40% energy
+                                </div>
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Cubic DVFS Law</strong
+                                    >
+                                    — E ∝ f² advantage
+                                </div>
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Break-even C-States</strong
+                                    >
+                                    — avoids costly wakes
+                                </div>
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Aging Promotion</strong
+                                    >
+                                    — zero starvation
+                                </div>
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Thermal Throttle</strong
+                                    >
+                                    — 80% at &gt;75°C
+                                </div>
+                                <div>
+                                    ✅
+                                    <strong style="color: var(--text)"
+                                        >Slack Analysis</strong
+                                    >
+                                    — minimum freq for RT
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+
+        <script>
+            "use strict";
+
+            // ──────────────────────────────────────────
+            //  Constants & Config
+            // ──────────────────────────────────────────
+            const DVFS_TABLE = [
+                { freq: 400, voltage: 850, power: 180 },
+                { freq: 600, voltage: 900, power: 280 },
+                { freq: 800, voltage: 950, power: 420 },
+                { freq: 1000, voltage: 1000, power: 600 },
+                { freq: 1200, voltage: 1050, power: 820 },
+                { freq: 1400, voltage: 1100, power: 1080 },
+                { freq: 1600, voltage: 1150, power: 1380 },
+                { freq: 1800, voltage: 1200, power: 1720 },
+                { freq: 2000, voltage: 1250, power: 2100 },
+            ];
+
+            const C_STATES = [
+                { name: "C0_ACTIVE", power: 1200, wakeCost: 0, wakeLatency: 0 },
+                {
+                    name: "C1_HALT",
+                    power: 800,
+                    wakeCost: 0.1,
+                    wakeLatency: 0.001,
+                },
+                {
+                    name: "C2_SLEEP",
+                    power: 200,
+                    wakeCost: 0.5,
+                    wakeLatency: 0.01,
+                },
+                {
+                    name: "C3_DEEP_SLEEP",
+                    power: 50,
+                    wakeCost: 2.0,
+                    wakeLatency: 0.1,
+                },
+            ];
+
+            const TASK_COLORS = {
+                REAL_TIME: "#d95c50",
+                INTERACTIVE: "#5b9cd9",
+                BACKGROUND: "#cfa276",
+                IDLE: "#5a504a",
+            };
+
+            // ──────────────────────────────────────────
+            //  State
+            // ──────────────────────────────────────────
+            let simInterval = null;
+            let simTime = 0;
+            let taskIdSeq = 0;
+
+            const state = {
+                cores: [],
+                rtQueue: [],
+                interQueue: [],
+                bgQueue: [],
+                completedTasks: [],
+                ganttData: [],
+                totalEnergy: 0,
+                deadlineMisses: 0,
+                totalTurnaround: 0,
+                totalWait: 0,
+                logs: [],
+            };
+
+            // ──────────────────────────────────────────
+            //  Navigation
+            // ──────────────────────────────────────────
+            function showSection(id) {
+                document
+                    .querySelectorAll(".section")
+                    .forEach((s) => s.classList.remove("active"));
+                document
+                    .querySelectorAll(".nav-item")
+                    .forEach((n) => n.classList.remove("active"));
+                document.getElementById("sec-" + id).classList.add("active");
+                event.currentTarget.classList.add("active");
+                if (id === "dvfs") renderDVFS();
+                if (id === "cstate") renderCState();
+                if (id === "energy") renderEnergyChart();
+                if (id === "architecture") renderArch();
+                if (id === "algorithm") renderAlgo();
+            }
+
+            // ──────────────────────────────────────────
+            //  Task Generation
+            // ──────────────────────────────────────────
+            function rand(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+            function randInt(min, max) {
+                return Math.floor(rand(min, max + 1));
+            }
+            function choice(arr) {
+                return arr[Math.floor(Math.random() * arr.length)];
+            }
+
+            function generateTasks(n) {
+                const types = ["REAL_TIME", "INTERACTIVE", "BACKGROUND"];
+                const weights = [0.2, 0.4, 0.4];
+                const tasks = [];
+
+                for (let i = 0; i < n; i++) {
+                    const r = Math.random();
+                    let type = "BACKGROUND";
+                    if (r < 0.2) type = "REAL_TIME";
+                    else if (r < 0.6) type = "INTERACTIVE";
+
+                    const burst =
+                        type === "REAL_TIME"
+                            ? rand(5, 20)
+                            : type === "INTERACTIVE"
+                              ? rand(10, 40)
+                              : rand(20, 100);
+
+                    const deadline =
+                        type === "REAL_TIME"
+                            ? burst + rand(20, 60)
+                            : type === "INTERACTIVE"
+                              ? burst + rand(50, 200)
+                              : null;
+
+                    const minFreq =
+                        type === "REAL_TIME"
+                            ? 1000
+                            : type === "INTERACTIVE"
+                              ? 600
+                              : 400;
+                    const maxFreq =
+                        type === "REAL_TIME"
+                            ? 2000
+                            : type === "INTERACTIVE"
+                              ? 1600
+                              : 1000;
+
+                    tasks.push({
+                        id: taskIdSeq++,
+                        name: `Task-${String(taskIdSeq - 1).padStart(3, "0")}`,
+                        type,
+                        arrivalTime: rand(0, 80),
+                        burstTime: burst,
+                        remainingTime: burst,
+                        deadline,
+                        minFreq,
+                        maxFreq,
+                        energyWeight: type === "BACKGROUND" ? 0.4 : 0.2,
+                        energyConsumed: 0,
+                        startTime: null,
+                        finishTime: null,
+                        waitTime: 0,
+                        assignedCore: null,
+                        freq: 1000,
+                        status: "pending",
+                    });
+                }
+                return tasks.sort((a, b) => a.arrivalTime - b.arrivalTime);
+            }
+
+            // ──────────────────────────────────────────
+            //  DVFS Governor
+            // ──────────────────────────────────────────
+            function computeOptimalFreq(tasks, core, profile) {
+                if (!tasks.length) return DVFS_TABLE[0].freq;
+
+                const hasRT = tasks.some((t) => t.type === "REAL_TIME");
+                if (hasRT) {
+                    const rt = tasks.filter((t) => t.type === "REAL_TIME");
+                    const critical = rt.reduce((a, b) =>
+                        slackTime(a) < slackTime(b) ? a : b,
+                    );
+                    const slack = slackTime(critical);
+                    if (slack <= 0)
+                        return DVFS_TABLE[DVFS_TABLE.length - 1].freq;
+                    const ratio =
+                        critical.remainingTime /
+                        (slack + critical.remainingTime);
+                    return selectFreqByUtil(Math.min(1, ratio * 1.1));
+                }
+
+                const totalWork = tasks
+                    .slice(0, 5)
+                    .reduce((s, t) => s + t.remainingTime, 0);
+                let util = Math.min(1, totalWork / 50);
+
+                if (profile === "PERFORMANCE")
+                    return DVFS_TABLE[DVFS_TABLE.length - 1].freq;
+                if (profile === "POWER_SAVE")
+                    return selectFreqByUtil(util * 0.9);
+
+                if (core.temperature > 75) util *= 0.8;
+                const target = util / 0.7;
+                return selectFreqByUtil(Math.min(1, target));
+            }
+
+            function selectFreqByUtil(util) {
+                const idx = Math.max(
+                    0,
+                    Math.min(
+                        DVFS_TABLE.length - 1,
+                        Math.floor(util * (DVFS_TABLE.length - 1)),
+                    ),
+                );
+                return DVFS_TABLE[idx].freq;
+            }
+
+            function slackTime(task) {
+                if (!task.deadline) return Infinity;
+                return task.deadline - simTime - task.remainingTime;
+            }
+
+            function predictEnergy(task, freq) {
+                const fRef = 1000,
+                    pRef = 600;
+                const execTime = task.burstTime * (fRef / freq);
+                const power = pRef * Math.pow(freq / fRef, 2);
+                return (power * execTime) / 1000;
+            }
+
+            function getFreqPower(freq) {
+                const entry =
+                    DVFS_TABLE.find((d) => d.freq === freq) || DVFS_TABLE[3];
+                return entry.power;
+            }
+
+            // ──────────────────────────────────────────
+            //  C-State
+            // ──────────────────────────────────────────
+            function predictIdleDuration(pendingCount, numCores) {
+                if (pendingCount === 0) return 100;
+                if (pendingCount < numCores) return 20;
+                return 5;
+            }
+
+            function selectCState(idleMs) {
+                for (const cs of [C_STATES[3], C_STATES[2], C_STATES[1]]) {
+                    const savings = cStateSavings(idleMs, cs);
+                    if (savings > 0) return cs;
+                }
+                return C_STATES[1];
+            }
+
+            function cStateSavings(idleMs, cstate) {
+                const c0Power = 1200;
+                const savingsRate = c0Power - cstate.power;
+                const gross = (savingsRate * idleMs) / 1000;
+                return gross - cstate.wakeCost;
+            }
+
+            // ──────────────────────────────────────────
+            //  Core Selection
+            // ──────────────────────────────────────────
+            function selectCore(task) {
+                const idle = state.cores.filter((c) => !c.currentTask);
+                if (!idle.length) return null;
+                const active = state.cores.filter((c) => c.currentTask);
+                const totalUtil = active.length / state.cores.length;
+                if (totalUtil < 0.5) {
+                    const c0idle = idle.filter((c) => c.cstate === "C0_ACTIVE");
+                    const pool = c0idle.length ? c0idle : idle;
+                    return pool.reduce((a, b) =>
+                        a.temperature < b.temperature ? a : b,
+                    );
+                }
+                return idle.reduce((a, b) =>
+                    a.temperature < b.temperature ? a : b,
+                );
+            }
+
+            // ──────────────────────────────────────────
+            //  Logging
+            // ──────────────────────────────────────────
+            function log(msg, type = "info") {
+                const ts = simTime.toFixed(1).padStart(7);
+                state.logs.push({ ts, msg, type });
+                if (state.logs.length > 120) state.logs.shift();
+                refreshLog();
+            }
+
+            function refreshLog() {
+                const el = document.getElementById("log-panel");
+                if (!el) return;
+                el.innerHTML = state.logs
+                    .map(
+                        (l) =>
+                            `<div class="log-${l.type}">[${l.ts}ms] ${l.msg}</div>`,
+                    )
+                    .join("");
+                el.scrollTop = el.scrollHeight;
+            }
+
+            // ──────────────────────────────────────────
+            //  Simulation Core
+            // ──────────────────────────────────────────
+            function initSimulation() {
+                const numCores = parseInt(
+                    document.getElementById("cfg-cores").value,
+                );
+                const numTasks = parseInt(
+                    document.getElementById("cfg-tasks").value,
+                );
+
+                // Reset state
+                Object.assign(state, {
+                    cores: [],
+                    rtQueue: [],
+                    interQueue: [],
+                    bgQueue: [],
+                    completedTasks: [],
+                    ganttData: [],
+                    totalEnergy: 0,
+                    deadlineMisses: 0,
+                    totalTurnaround: 0,
+                    totalWait: 0,
+                    logs: [],
+                });
+                simTime = 0;
+                taskIdSeq = 0;
+
+                for (let i = 0; i < numCores; i++) {
+                    state.cores.push({
+                        id: i,
+                        currentTask: null,
+                        freq: 1000,
+                        cstate: "C0_ACTIVE",
+                        totalEnergy: 0,
+                        utilization: 0,
+                        temperature: 40 + rand(-5, 5),
+                    });
+                }
+
+                const tasks = generateTasks(numTasks);
+                state._pendingTasks = tasks;
+                log("EcoScheduler initialized", "ok");
+                log(
+                    `Cores: ${numCores} | Tasks: ${numTasks} | Profile: ${document.getElementById("cfg-profile").value}`,
+                    "info",
+                );
+                renderDashboard();
+                renderTaskQueue();
+                renderCoreActivity();
+            }
+
+            function schedulingStep() {
+                const quantum = parseInt(
+                    document.getElementById("cfg-quantum").value,
+                );
+                const profile = document.getElementById("cfg-profile").value;
+                simTime += quantum * 0.3;
+
+                // Submit arriving tasks
+                const arrived = (state._pendingTasks || []).filter(
+                    (t) => t.arrivalTime <= simTime,
+                );
+                arrived.forEach((t) => {
+                    state._pendingTasks = state._pendingTasks.filter(
+                        (p) => p !== t,
+                    );
+                    if (t.type === "REAL_TIME") {
+                        state.rtQueue.push(t);
+                        state.rtQueue.sort(
+                            (a, b) =>
+                                (a.deadline || Infinity) -
+                                (b.deadline || Infinity),
+                        );
+                        log(
+                            `[RT ] Arrived: ${t.name} deadline=${t.deadline?.toFixed(1)}ms`,
+                            "warn",
+                        );
+                    } else if (t.type === "INTERACTIVE") {
+                        state.interQueue.push(t);
+                        log(`[INT] Arrived: ${t.name}`, "info");
+                    } else {
+                        state.bgQueue.push(t);
+                        log(`[BG ] Arrived: ${t.name}`, "dim");
+                    }
+                });
+
+                // Aging: promote long-waiting background tasks
+                state.bgQueue.forEach((t) => {
+                    t._waitQuanta = (t._waitQuanta || 0) + 1;
+                });
+                const promoted = state.bgQueue.filter(
+                    (t) => t._waitQuanta >= 5,
+                );
+                promoted.forEach((t) => {
+                    state.bgQueue = state.bgQueue.filter((b) => b !== t);
+                    t.type = "INTERACTIVE";
+                    t._waitQuanta = 0;
+                    state.interQueue.push(t);
+                    log(`Aging promotion: ${t.name} BG→INTERACTIVE`, "warn");
+                });
+
+                // Check deadline misses
+                state.rtQueue.forEach((t) => {
+                    if (t.deadline && simTime > t.arrivalTime + t.deadline) {
+                        state.rtQueue = state.rtQueue.filter((r) => r !== t);
+                        state.deadlineMisses++;
+                        log(`DEADLINE MISS: ${t.name}`, "error");
+                    }
+                });
+
+                // Free completed cores
+                state.cores.forEach((core) => {
+                    if (core.currentTask) {
+                        const task = core.currentTask;
+                        const slice = Math.min(quantum, task.remainingTime);
+                        const power = getFreqPower(core.freq) + 50;
+                        const energy = (power * slice) / 1000;
+                        task.energyConsumed += energy;
+                        core.totalEnergy += energy;
+                        state.totalEnergy += energy;
+                        task.remainingTime -= slice;
+
+                        if (task.remainingTime <= 0.5) {
+                            task.finishTime = simTime;
+                            task.status = "completed";
+                            const turnaround =
+                                task.finishTime - task.arrivalTime;
+                            const wait = turnaround - task.burstTime;
+                            state.totalTurnaround += turnaround;
+                            state.totalWait += wait;
+                            state.completedTasks.push(task);
+                            core.currentTask = null;
+                            core.utilization = Math.max(
+                                0,
+                                core.utilization - 0.2,
+                            );
+                            log(
+                                `✓ Completed: ${task.name} | E=${task.energyConsumed.toFixed(1)}mJ | T=${turnaround.toFixed(1)}ms`,
+                                "ok",
+                            );
+
+                            const entry = {
+                                task: task.name,
+                                type: task.type,
+                                burst: task.burstTime.toFixed(1),
+                                freq: task.freq,
+                                energy: task.energyConsumed.toFixed(2),
+                                status: "Done",
+                            };
+                            updateEnergyLog(entry);
+                        } else {
+                            // Preempt / re-queue
+                            core.currentTask = null;
+                            if (task.type === "REAL_TIME") {
+                                state.rtQueue.unshift(task);
+                                state.rtQueue.sort(
+                                    (a, b) =>
+                                        (a.deadline || Infinity) -
+                                        (b.deadline || Infinity),
+                                );
+                            } else if (task.type === "INTERACTIVE") {
+                                state.interQueue.unshift(task);
+                            } else {
+                                state.bgQueue.push(task);
+                            }
+                        }
+                    }
+                });
+
+                // Schedule new tasks onto idle cores
+                state.cores.forEach((core) => {
+                    if (core.currentTask) return;
+
+                    const allReady = [
+                        ...state.rtQueue,
+                        ...state.interQueue,
+                        ...state.bgQueue,
+                    ];
+                    const task =
+                        state.rtQueue[0] ||
+                        (state.interQueue.length
+                            ? state.interQueue[0]
+                            : null) ||
+                        (state.rtQueue.length === 0 &&
+                        state.interQueue.length === 0
+                            ? state.bgQueue[0]
+                            : null);
+
+                    if (!task) {
+                        // Idle → C-state
+                        const idleDur = predictIdleDuration(
+                            allReady.length,
+                            state.cores.length,
+                        );
+                        const cs = selectCState(idleDur);
+                        core.cstate = cs.name;
+                        core.utilization = Math.max(0, core.utilization - 0.05);
+                        return;
+                    }
+
+                    // Dequeue
+                    if (task.type === "REAL_TIME")
+                        state.rtQueue = state.rtQueue.filter((t) => t !== task);
+                    else if (task.type === "INTERACTIVE")
+                        state.interQueue = state.interQueue.filter(
+                            (t) => t !== task,
+                        );
+                    else
+                        state.bgQueue = state.bgQueue.filter((t) => t !== task);
+
+                    const freq = computeOptimalFreq(allReady, core, profile);
+                    const clampedFreq = Math.max(
+                        task.minFreq,
+                        Math.min(task.maxFreq, freq),
+                    );
+
+                    task.freq = clampedFreq;
+                    task.status = "running";
+                    task.startTime = task.startTime || simTime;
+                    core.currentTask = task;
+                    core.freq = clampedFreq;
+                    core.cstate = "C0_ACTIVE";
+                    core.utilization = Math.min(1, core.utilization + 0.25);
+                    core.temperature = Math.min(
+                        90,
+                        core.temperature + rand(0, 1.5),
+                    );
+
+                    // Gantt entry
+                    state.ganttData.push({
+                        core: core.id,
+                        task: task.name,
+                        type: task.type,
+                        start: simTime,
+                        end: simTime + Math.min(quantum, task.remainingTime),
+                        freq: clampedFreq,
+                    });
+
+                    log(
+                        `→ ${task.name} [${task.type}] → Core${core.id} @ ${clampedFreq}MHz`,
+                        "info",
+                    );
+                });
+
+                // Idle cores: cool down
+                state.cores
+                    .filter((c) => !c.currentTask)
+                    .forEach((c) => {
+                        c.temperature = Math.max(
+                            35,
+                            c.temperature - rand(0, 0.8),
+                        );
+                    });
+
+                renderDashboard();
+                renderTaskQueue();
+                renderCoreActivity();
+                renderGantt();
+                renderEnergyMeter();
+
+                // Stop when all done
+                const allPending =
+                    (state._pendingTasks || []).length +
+                    state.rtQueue.length +
+                    state.interQueue.length +
+                    state.bgQueue.length;
+                const busyCores = state.cores.filter(
+                    (c) => c.currentTask,
+                ).length;
+                if (allPending === 0 && busyCores === 0) {
+                    stopSimulation();
+                    log("═══ Simulation Complete ═══", "ok");
+                    const done = state.completedTasks.length;
+                    if (done > 0) {
+                        log(
+                            `Avg Turnaround: ${(state.totalTurnaround / done).toFixed(1)}ms`,
+                            "ok",
+                        );
+                        log(
+                            `Avg Wait:       ${(state.totalWait / done).toFixed(1)}ms`,
+                            "ok",
+                        );
+                        log(
+                            `Total Energy:   ${state.totalEnergy.toFixed(1)}mJ`,
+                            "ok",
+                        );
+                        log(
+                            `Deadline Misses: ${state.deadlineMisses}`,
+                            state.deadlineMisses ? "error" : "ok",
+                        );
+                    }
+                }
+            }
+
+            function startSimulation() {
+                if (simInterval) return;
+                if (!state.cores.length) initSimulation();
+                const speed = parseInt(
+                    document.getElementById("cfg-speed").value,
+                );
+                const delay = Math.max(50, 600 - speed * 50);
+                simInterval = setInterval(schedulingStep, delay);
+                log("Simulation started ▶", "ok");
+            }
+
+            function stopSimulation() {
+                if (simInterval) {
+                    clearInterval(simInterval);
+                    simInterval = null;
+                }
+            }
+
+            function resetSimulation() {
+                stopSimulation();
+                initSimulation();
+                document.getElementById("gantt-container").innerHTML =
+                    '<div style="color:var(--muted);font-size:0.8rem;font-weight:600;">Run the scheduler to generate Gantt chart data.</div>';
+                document.getElementById("energy-log-table").innerHTML = "";
+                log("Simulation reset ↺", "warn");
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Dashboard
+            // ──────────────────────────────────────────
+            function renderDashboard() {
+                const done = state.completedTasks.length;
+                document.getElementById("stat-completed").textContent = done;
+                document.getElementById("stat-energy").textContent =
+                    state.totalEnergy.toFixed(0);
+                document.getElementById("stat-misses").textContent =
+                    state.deadlineMisses;
+
+                if (done > 0) {
+                    document.getElementById("avg-turn").textContent =
+                        (state.totalTurnaround / done).toFixed(1) + " ms";
+                    document.getElementById("avg-wait").textContent =
+                        (state.totalWait / done).toFixed(1) + " ms";
+                }
+
+                const rtLen = state.rtQueue.length;
+                const intLen = state.interQueue.length;
+                const bgLen = state.bgQueue.length;
+                const maxQ = 15;
+
+                document.getElementById("q-rt-count").textContent =
+                    rtLen + " tasks";
+                document.getElementById("q-int-count").textContent =
+                    intLen + " tasks";
+                document.getElementById("q-bg-count").textContent =
+                    bgLen + " tasks";
+                document.getElementById("q-rt-bar").style.width =
+                    Math.min(100, (rtLen / maxQ) * 100) + "%";
+                document.getElementById("q-int-bar").style.width =
+                    Math.min(100, (intLen / maxQ) * 100) + "%";
+                document.getElementById("q-bg-bar").style.width =
+                    Math.min(100, (bgLen / maxQ) * 100) + "%";
+
+                // Core status
+                const el = document.getElementById("core-status-list");
+                if (!el || !state.cores.length) return;
+                el.innerHTML = state.cores
+                    .map((c) => {
+                        const task = c.currentTask;
+                        const color = task
+                            ? TASK_COLORS[task.type]
+                            : "var(--idle-color)";
+                        const label = task
+                            ? task.name
+                            : c.cstate.replace("_", " ");
+                        const util = Math.round(c.utilization * 100);
+                        return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:4px;">
+          <span style="font-weight:800; color:var(--text);">Core ${c.id}</span>
+          <span style="color:${color}; font-weight:700;">${label}</span>
+          <span style="color:var(--muted); font-weight:600;">${c.freq} MHz · ${c.temperature.toFixed(0)}°C</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${util}%;background:${color};"></div>
+        </div>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Task Queue
+            // ──────────────────────────────────────────
+            function renderTaskQueue() {
+                const el = document.getElementById("task-queue-vis");
+                if (!el) return;
+
+                const allTasks = [
+                    ...state.rtQueue.map((t) => ({
+                        ...t,
+                        queuePos: "RT Queue",
+                    })),
+                    ...state.interQueue.map((t) => ({
+                        ...t,
+                        queuePos: "INT Queue",
+                    })),
+                    ...state.bgQueue.map((t) => ({
+                        ...t,
+                        queuePos: "BG Queue",
+                    })),
+                    ...state.cores
+                        .filter((c) => c.currentTask)
+                        .map((c) => ({
+                            ...c.currentTask,
+                            queuePos: `Core ${c.id}`,
+                        })),
+                ].slice(0, 15);
+
+                el.innerHTML = allTasks.length
+                    ? allTasks
+                          .map((t) => {
+                              const color = TASK_COLORS[t.type];
+                              const isRun = state.cores.some(
+                                  (c) =>
+                                      c.currentTask === t ||
+                                      (c.currentTask &&
+                                          c.currentTask.id === t.id),
+                              );
+                              const pct = Math.round(
+                                  (1 - t.remainingTime / t.burstTime) * 100,
+                              );
+                              return `
+      <div class="task-pill ${isRun ? "running" : ""}">
+        <div class="task-pill-type" style="background:${color};"></div>
+        <div class="task-pill-name" style="color:var(--text);">${t.name}</div>
+        <div class="task-pill-info">${t.remainingTime.toFixed(1)}ms left · ${t.queuePos}</div>
+        <div style="width:50px;">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${pct}%;background:${color};"></div>
+          </div>
+        </div>
+      </div>`;
+                          })
+                          .join("")
+                    : '<div style="color:var(--muted);font-size:0.78rem;padding:8px;font-weight:600;">No tasks in queue</div>';
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Core Activity
+            // ──────────────────────────────────────────
+            function renderCoreActivity() {
+                const el = document.getElementById("core-activity");
+                if (!el || !state.cores.length) return;
+                el.innerHTML = state.cores
+                    .map((c) => {
+                        const task = c.currentTask;
+                        const color = task
+                            ? TASK_COLORS[task.type]
+                            : "var(--idle-color)";
+                        const label = task
+                            ? `${task.name} (${task.type})`
+                            : `Idle – ${c.cstate}`;
+                        const freq = c.freq;
+                        const dvfs =
+                            DVFS_TABLE.find((d) => d.freq === freq) ||
+                            DVFS_TABLE[3];
+                        const pwr = task
+                            ? dvfs.power + 50
+                            : C_STATES.find((cs) => cs.name === c.cstate)
+                                  ?.power || 50;
+
+                        return `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:${color};
+            ${task ? "box-shadow:0 0 8px " + color + ";" : ""}"></div>
+          <span style="font-weight:800;font-size:0.82rem;color:var(--text);">Core ${c.id}</span>
+          <span style="color:var(--muted);font-weight:700;font-size:0.72rem;margin-left:auto;">${pwr} mW</span>
+        </div>
+        <div style="font-size:0.75rem;font-weight:700;color:${task ? "var(--text)" : "var(--muted)"};">${label}</div>
+        <div style="display:flex;justify-content:space-between;font-weight:600;font-size:0.68rem;color:var(--muted);margin-top:6px;">
+          <span>${freq} MHz · ${dvfs.voltage} mV</span>
+          <span>${c.temperature.toFixed(1)}°C</span>
+          <span>${c.totalEnergy.toFixed(1)} mJ used</span>
+        </div>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Gantt
+            // ──────────────────────────────────────────
+            function renderGantt() {
+                const el = document.getElementById("gantt-container");
+                if (!el || !state.ganttData.length) return;
+
+                const numCores = state.cores.length;
+                const maxTime = Math.max(
+                    ...state.ganttData.map((d) => d.end),
+                    simTime,
+                    10,
+                );
+                const tickStep = Math.ceil(maxTime / 10);
+                const ticks = [];
+                for (let t = 0; t <= maxTime; t += tickStep) ticks.push(t);
+
+                let html = `<div class="gantt-tick-row">`;
+                ticks.forEach((t) => {
+                    html += `<div class="gantt-tick">${t.toFixed(0)}</div>`;
+                });
+                html += `</div>`;
+
+                for (let c = 0; c < numCores; c++) {
+                    const bars = state.ganttData.filter((d) => d.core === c);
+                    html += `<div class="gantt-row">
+      <div class="gantt-core-name">Core ${c}</div>
+      <div class="gantt-bar-row" id="gantt-core-${c}">`;
+
+                    bars.forEach((b) => {
+                        const left = (b.start / maxTime) * 100;
+                        const width = Math.max(
+                            0.5,
+                            ((b.end - b.start) / maxTime) * 100,
+                        );
+                        const color = TASK_COLORS[b.type] || "var(--accent)";
+                        html += `
+        <div class="gantt-bar"
+          style="left:${left}%;width:${width}%;background:${color}22;border-left:2px solid ${color};"
+          onmouseenter="showTooltip(event,'${b.task}','${b.type}',${b.start.toFixed(1)},${b.end.toFixed(1)},${b.freq})"
+          onmouseleave="hideTooltip()">
+          <span style="color:${color};overflow:hidden;">${width > 5 ? b.task : ""}</span>
+        </div>`;
+                    });
+
+                    html += `</div></div>`;
+                }
+
+                html += `<div style="text-align:right;font-weight:600;font-size:0.65rem;color:var(--muted);margin-top:4px;">Time (ms) →</div>`;
+                el.innerHTML = html;
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Energy Meter
+            // ──────────────────────────────────────────
+            function renderEnergyMeter() {
+                const el = document.getElementById("energy-meter");
+                if (!el || !state.cores.length) return;
+                const maxE = Math.max(
+                    ...state.cores.map((c) => c.totalEnergy),
+                    1,
+                );
+                el.innerHTML = state.cores
+                    .map((c) => {
+                        const pct = (c.totalEnergy / maxE) * 100;
+                        const color =
+                            pct > 80
+                                ? "var(--rt-color)"
+                                : pct > 50
+                                  ? "var(--warn)"
+                                  : "var(--bg-color)";
+                        return `
+      <div class="meter-row">
+        <div class="meter-label">Core ${c.id}</div>
+        <div class="meter-bar">
+          <div class="meter-fill" style="width:${pct}%;background:${color};"></div>
+        </div>
+        <div class="meter-val" style="color:${color};">${c.totalEnergy.toFixed(1)} mJ</div>
+      </div>`;
+                    })
+                    .join("");
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: DVFS Chart
+            // ──────────────────────────────────────────
+            function renderDVFS() {
+                // Table
+                const tbody = document.getElementById("dvfs-table-body");
+                if (tbody) {
+                    const maxEff = Math.max(
+                        ...DVFS_TABLE.map((d) => d.freq / d.power),
+                    );
+                    tbody.innerHTML = DVFS_TABLE.map((d) => {
+                        const eff = ((d.freq / d.power) * 1000).toFixed(2);
+                        const effRel = d.freq / d.power / maxEff;
+                        const cls =
+                            effRel > 0.8
+                                ? "tag-good"
+                                : effRel > 0.5
+                                  ? "tag-warn"
+                                  : "tag-bad";
+                        return `<tr>
+        <td style="color:var(--text);"><strong>${d.freq}</strong></td>
+        <td style="color:var(--text);">${d.voltage}</td>
+        <td style="color:var(--text);">${d.power}</td>
+        <td><span class="tag ${cls}">${eff} kHz/mW</span></td>
+      </tr>`;
+                    }).join("");
+                }
+
+                // Canvas
+                const canvas = document.getElementById("dvfs-canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                const W = canvas.width,
+                    H = canvas.height;
+                const PAD = { top: 30, right: 30, bottom: 50, left: 60 };
+                const cW = W - PAD.left - PAD.right;
+                const cH = H - PAD.top - PAD.bottom;
+
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = "#221d1a"; /* matches --surface */
+                ctx.fillRect(0, 0, W, H);
+
+                // Grid
+                ctx.strokeStyle = "#4a4039"; /* matches --border */
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 5; i++) {
+                    const y = PAD.top + cH - (i / 5) * cH;
+                    ctx.beginPath();
+                    ctx.moveTo(PAD.left, y);
+                    ctx.lineTo(PAD.left + cW, y);
+                    ctx.stroke();
+                    ctx.fillStyle = "#a69a8f"; /* matches --muted */
+                    ctx.font = "bold 11px monospace";
+                    ctx.textAlign = "right";
+                    ctx.fillText(
+                        Math.round((i / 5) * 2000) + "",
+                        PAD.left - 6,
+                        y + 4,
+                    );
+                }
+
+                // Utils
+                const utils = [
+                    0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+                ];
+                const profiles = [
+                    {
+                        label: "Performance",
+                        color: "#d95c50",
+                        fn: () => 2000,
+                    } /* rt-color */,
+                    {
+                        label: "Balanced",
+                        color: "#5b9cd9" /* int-color */,
+                        fn: (u) => {
+                            const f = selectFreqByUtil(u / 0.7);
+                            return Math.min(2000, f);
+                        },
+                    },
+                    {
+                        label: "Power Save",
+                        color: "#cfa276" /* bg-color */,
+                        fn: (u) => selectFreqByUtil(u * 0.9),
+                    },
+                ];
+
+                profiles.forEach((p) => {
+                    ctx.beginPath();
+                    ctx.strokeStyle = p.color;
+                    ctx.lineWidth = 2.5;
+                    utils.forEach((u, i) => {
+                        const x = PAD.left + u * cW;
+                        const f = p.fn(u);
+                        const y = PAD.top + cH - (f / 2000) * cH;
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+
+                    // Label
+                    const lastU = utils[utils.length - 1];
+                    const lastF = p.fn(lastU);
+                    const lx = PAD.left + lastU * cW - 4;
+                    const ly = PAD.top + cH - (lastF / 2000) * cH - 8;
+                    ctx.fillStyle = p.color;
+                    ctx.font = "bold 11px sans-serif";
+                    ctx.textAlign = "right";
+                    ctx.fillText(p.label, lx, ly);
+                });
+
+                // Axes
+                ctx.strokeStyle = "#5a504a"; /* idle-color */
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top);
+                ctx.lineTo(PAD.left, PAD.top + cH);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top + cH);
+                ctx.lineTo(PAD.left + cW, PAD.top + cH);
+                ctx.stroke();
+
+                // X labels
+                ctx.fillStyle = "#a69a8f";
+                ctx.font = "bold 11px monospace";
+                ctx.textAlign = "center";
+                [0, 0.25, 0.5, 0.75, 1].forEach((u) => {
+                    ctx.fillText(
+                        u * 100 + "%",
+                        PAD.left + u * cW,
+                        PAD.top + cH + 20,
+                    );
+                });
+                ctx.fillText("CPU Utilization", PAD.left + cW / 2, H - 6);
+
+                // Y axis label
+                ctx.save();
+                ctx.translate(14, PAD.top + cH / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText("Frequency (MHz)", 0, 0);
+                ctx.restore();
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: C-State Chart
+            // ──────────────────────────────────────────
+            function renderCState() {
+                const canvas = document.getElementById("cstate-canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                const W = canvas.width,
+                    H = canvas.height;
+                const PAD = { top: 30, right: 30, bottom: 50, left: 70 };
+                const cW = W - PAD.left - PAD.right;
+                const cH = H - PAD.top - PAD.bottom;
+
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = "#221d1a";
+                ctx.fillRect(0, 0, W, H);
+
+                const idleTimes = [0.5, 1, 2, 5, 10, 20, 50, 100, 200];
+                const stateColors = ["#5b9cd9", "#cfa276", "#d95c50"];
+                const cstates = [C_STATES[1], C_STATES[2], C_STATES[3]];
+
+                const allVals = cstates.flatMap((cs) =>
+                    idleTimes.map((t) => cStateSavings(t, cs)),
+                );
+                const minVal = Math.min(...allVals, -3);
+                const maxVal = Math.max(...allVals, 10);
+                const range = maxVal - minVal;
+
+                function toY(v) {
+                    return PAD.top + cH - ((v - minVal) / range) * cH;
+                }
+
+                // Grid
+                ctx.strokeStyle = "#4a4039";
+                ctx.lineWidth = 1;
+                [-2, 0, 5, 10, 20, 50]
+                    .filter((v) => v >= minVal && v <= maxVal)
+                    .forEach((v) => {
+                        const y = toY(v);
+                        ctx.beginPath();
+                        ctx.moveTo(PAD.left, y);
+                        ctx.lineTo(PAD.left + cW, y);
+                        ctx.stroke();
+                        ctx.fillStyle = "#a69a8f";
+                        ctx.font = "bold 10px monospace";
+                        ctx.textAlign = "right";
+                        ctx.fillText(v, PAD.left - 6, y + 4);
+                    });
+
+                // Zero line
+                const zeroY = toY(0);
+                ctx.strokeStyle = "#5a504a";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, zeroY);
+                ctx.lineTo(PAD.left + cW, zeroY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = "#5a504a";
+                ctx.font = "bold 10px sans-serif";
+                ctx.textAlign = "left";
+                ctx.fillText("Break-even", PAD.left + 4, zeroY - 4);
+
+                // Lines
+                cstates.forEach((cs, ci) => {
+                    const color = stateColors[ci];
+                    ctx.beginPath();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2.5;
+                    idleTimes.forEach((t, i) => {
+                        const x = PAD.left + (i / (idleTimes.length - 1)) * cW;
+                        const sv = cStateSavings(t, cs);
+                        const y = toY(sv);
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+
+                    // Dots
+                    idleTimes.forEach((t, i) => {
+                        const x = PAD.left + (i / (idleTimes.length - 1)) * cW;
+                        const sv = cStateSavings(t, cs);
+                        const y = toY(sv);
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, Math.PI * 2);
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                    });
+
+                    // Label
+                    const lastSv = cStateSavings(
+                        idleTimes[idleTimes.length - 1],
+                        cs,
+                    );
+                    ctx.fillStyle = color;
+                    ctx.font = "bold 10px sans-serif";
+                    ctx.textAlign = "right";
+                    ctx.fillText(cs.name, PAD.left + cW - 2, toY(lastSv) - 6);
+                });
+
+                // Axes
+                ctx.strokeStyle = "#5a504a";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top);
+                ctx.lineTo(PAD.left, PAD.top + cH);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top + cH);
+                ctx.lineTo(PAD.left + cW, PAD.top + cH);
+                ctx.stroke();
+
+                ctx.fillStyle = "#a69a8f";
+                ctx.font = "bold 10px monospace";
+                ctx.textAlign = "center";
+                idleTimes.forEach((t, i) => {
+                    const x = PAD.left + (i / (idleTimes.length - 1)) * cW;
+                    ctx.fillText(t + "ms", x, PAD.top + cH + 18);
+                });
+                ctx.fillText("Idle Duration", PAD.left + cW / 2, H - 4);
+                ctx.save();
+                ctx.translate(14, PAD.top + cH / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText("Net Energy Saved (mJ)", 0, 0);
+                ctx.restore();
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Energy Chart
+            // ──────────────────────────────────────────
+            function renderEnergyChart() {
+                const canvas = document.getElementById("energy-canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                const W = canvas.width,
+                    H = canvas.height;
+                const PAD = { top: 30, right: 30, bottom: 50, left: 70 };
+                const cW = W - PAD.left - PAD.right;
+                const cH = H - PAD.top - PAD.bottom;
+
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = "#221d1a";
+                ctx.fillRect(0, 0, W, H);
+
+                const burstTimes = [10, 20, 30, 50];
+                const burstColors = [
+                    "#5b9cd9",
+                    "#cfa276",
+                    "#d95c50",
+                    "#86a8cc",
+                ];
+                const freqs = DVFS_TABLE.map((d) => d.freq);
+                const maxEnergy = Math.max(
+                    ...burstTimes.flatMap((bt) =>
+                        freqs.map((f) => predictEnergy({ burstTime: bt }, f)),
+                    ),
+                );
+
+                function toX(f) {
+                    return (
+                        PAD.left + (freqs.indexOf(f) / (freqs.length - 1)) * cW
+                    );
+                }
+                function toY(e) {
+                    return PAD.top + cH - (e / maxEnergy) * cH;
+                }
+
+                // Grid
+                ctx.strokeStyle = "#4a4039";
+                ctx.lineWidth = 1;
+                [0, 0.25, 0.5, 0.75, 1].forEach((r) => {
+                    const y = PAD.top + cH * (1 - r);
+                    ctx.beginPath();
+                    ctx.moveTo(PAD.left, y);
+                    ctx.lineTo(PAD.left + cW, y);
+                    ctx.stroke();
+                    ctx.fillStyle = "#a69a8f";
+                    ctx.font = "bold 10px monospace";
+                    ctx.textAlign = "right";
+                    ctx.fillText(
+                        (maxEnergy * r).toFixed(0),
+                        PAD.left - 6,
+                        y + 4,
+                    );
+                });
+
+                // Lines
+                burstTimes.forEach((bt, bi) => {
+                    const color = burstColors[bi];
+                    ctx.beginPath();
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    freqs.forEach((f, i) => {
+                        const e = predictEnergy({ burstTime: bt }, f);
+                        const x = toX(f),
+                            y = toY(e);
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                    const lastE = predictEnergy(
+                        { burstTime: bt },
+                        freqs[freqs.length - 1],
+                    );
+                    ctx.fillStyle = color;
+                    ctx.font = "bold 10px sans-serif";
+                    ctx.textAlign = "right";
+                    ctx.fillText(
+                        `${bt}ms task`,
+                        PAD.left + cW - 2,
+                        toY(lastE) - 5,
+                    );
+                });
+
+                // Axes
+                ctx.strokeStyle = "#5a504a";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top);
+                ctx.lineTo(PAD.left, PAD.top + cH);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(PAD.left, PAD.top + cH);
+                ctx.lineTo(PAD.left + cW, PAD.top + cH);
+                ctx.stroke();
+
+                ctx.fillStyle = "#a69a8f";
+                ctx.font = "bold 10px monospace";
+                ctx.textAlign = "center";
+                freqs.forEach((f) => {
+                    const x = toX(f);
+                    ctx.fillText(f, x, PAD.top + cH + 18);
+                });
+                ctx.fillText("CPU Frequency (MHz)", PAD.left + cW / 2, H - 4);
+                ctx.save();
+                ctx.translate(14, PAD.top + cH / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText("Energy (mJ)", 0, 0);
+                ctx.restore();
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Energy Log Table
+            // ──────────────────────────────────────────
+            function updateEnergyLog(entry) {
+                const tbody = document.getElementById("energy-log-table");
+                if (!tbody) return;
+                const color = TASK_COLORS[entry.type] || "var(--accent)";
+                const row = document.createElement("tr");
+                row.innerHTML = `
+    <td style="color:var(--text);"><strong>${entry.task}</strong></td>
+    <td><span class="tag" style="background:${color}22;color:${color};">${entry.type}</span></td>
+    <td style="color:var(--text);">${entry.burst}</td>
+    <td style="color:var(--text);">${entry.freq}</td>
+    <td style="color:var(--text);"><strong>${entry.energy}</strong></td>
+    <td><span class="tag tag-good">Done</span></td>`;
+                tbody.prepend(row);
+                if (tbody.children.length > 20)
+                    tbody.removeChild(tbody.lastChild);
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Architecture
+            // ──────────────────────────────────────────
+            function renderArch() {
+                document.getElementById("arch-diagram").textContent = `
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        EcoScheduler Framework                            │
+├──────────────────┬──────────────────────┬───────────────────────────────┤
+│   Task Profiler  │    Energy Monitor    │    Performance Controller     │
+│  ┌────────────┐  │  ┌────────────────┐  │  ┌─────────────────────────┐ │
+│  │  Workload  │  │  │  Power States  │  │  │   DVFS Management       │ │
+│  │  Analysis  │  │  │  Tracking      │  │  │   C-States Control      │ │
+│  │  Arrival   │  │  │  Energy Pred.  │  │  │   Thermal Throttling    │ │
+│  │  Rate Est. │  │  │  Budget Mgmt   │  │  │   Frequency Scaling     │ │
+│  └────────────┘  │  └────────────────┘  │  └─────────────────────────┘ │
+├──────────────────┴──────────────────────┴───────────────────────────────┤
+│                      Adaptive Scheduling Core                            │
+│                                                                          │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐               │
+│   │  RT Queue    │   │  INT Queue   │   │  BG Queue    │               │
+│   │  (Min-Heap   │   │  (Priority   │   │  (FIFO +     │               │
+│   │   by EDF)    │   │   Round-     │   │   Aging)     │               │
+│   │              │   │   Robin)     │   │              │               │
+│   └──────┬───────┘   └──────┬───────┘   └──────┬───────┘               │
+│          │                  │                  │                         │
+│          └──────────────────┴──────────────────┘                        │
+│                             │                                            │
+│                    ┌────────▼────────┐                                  │
+│                    │  Eco-Priority   │                                  │
+│                    │  Selector       │                                  │
+│                    │  (Deadline +    │                                  │
+│                    │   Energy Score) │                                  │
+│                    └────────┬────────┘                                  │
+│                             │                                            │
+│            ┌────────────────┼─────────────────┐                        │
+│            ▼                ▼                  ▼                        │
+│     ┌─────────────┐  ┌─────────────┐   ┌─────────────┐                │
+│     │   Core 0    │  │   Core 1    │   │   Core N    │                │
+│     │  DVFS+Cst   │  │  DVFS+Cst  │   │  DVFS+Cst  │                │
+│     └─────────────┘  └─────────────┘   └─────────────┘                │
+├─────────────────────────────────────────────────────────────────────────┤
+│          Hardware Abstraction Layer (CPU Freq / Voltage / C-State)       │
+└─────────────────────────────────────────────────────────────────────────┘`;
+            }
+
+            // ──────────────────────────────────────────
+            //  Render: Algorithm Pseudocode
+            // ──────────────────────────────────────────
+            function renderAlgo() {
+                document.getElementById("algo-flow").textContent = `
+EcoScheduler() — Main Loop Pseudocode
+══════════════════════════════════════════════════════════════
+
+PROCEDURE schedule():
+  apply_aging()                    // O(n) — promote starved BG tasks
+
+  task ← SELECT FIRST FROM:
+    ├─ rt_queue  (if has expired?) → log DEADLINE_MISS, skip
+    ├─ rt_queue  → EDF: task with minimum deadline
+    ├─ int_queue → Priority Round-Robin: front of queue
+    └─ bg_queue  → Only if rt_queue AND int_queue EMPTY
+
+  IF task = NULL THEN
+    FOR EACH idle_core DO
+      idle_dur ← predict_idle_duration(queue_depth)
+      c_state  ← break_even_analysis(idle_dur)
+        // C3 if savings(idle_dur, C3) > 0
+        // C2 if savings(idle_dur, C2) > 0
+        // C1 otherwise
+      enter_c_state(c_state)
+    RETURN
+
+  core ← select_optimal_core(task)
+    IF system_util < 0.5 THEN
+      // PACKING: prefer already-active cores (task consolidation)
+      // → other cores sleep deeper → more energy saved
+      pick lowest-temp C0_ACTIVE core
+    ELSE
+      // SPREADING: thermal management
+      pick lowest-temp idle core
+
+  freq ← dvfs_governor(core, all_tasks, profile)
+    IF has_real_time_task THEN
+      slack   ← deadline - now - remaining_time
+      ratio   ← remaining / (slack + remaining)  // urgency ratio
+      freq    ← select_freq(ratio × 1.1)         // 10% safety margin
+    ELSE IF profile = BALANCED THEN
+      util    ← Σ(remaining[0:5]) / window(50ms)
+      target  ← util / 0.70                       // EDP sweet spot
+      IF core.temp > 75°C → target ×= 0.80        // thermal throttle
+      freq    ← f_opt ∝ ∛(workload / η)
+    ELSE IF profile = POWER_SAVE THEN
+      freq    ← select_freq(util × 0.90)
+    ELSE  // PERFORMANCE
+      freq    ← f_max
+
+  freq ← CLAMP(freq, task.min_freq, task.max_freq)
+  core.set_frequency(freq)
+  core.wake_from_c_state()         // pay wake latency cost
+  core.current_task ← task
+  dispatch(task, core)
+
+══════════════════════════════════════════════════════════════
+ENERGY MODEL:
+  E(f) = P(f) × t(f)
+       = [P_ref × (f/f_ref)²] × [t_ref × (f_ref/f)]
+       = P_ref × t_ref × (f/f_ref)          ← linear in f!
+
+  ∴ Lower frequency → proportionally lower energy per unit work
+  ∴ But: deadline constraints set a floor on minimum frequency
+
+C-STATE BREAK-EVEN:
+  savings(idle, cs) = (P_C0 - P_cs) × idle / 1000 - wake_cost
+  Choose deepest cs WHERE savings > 0`;
+            }
+
+            // ──────────────────────────────────────────
+            //  Tooltip
+            // ──────────────────────────────────────────
+            function showTooltip(event, name, type, start, end, freq) {
+                const tip = document.getElementById("tooltip");
+                const dur = (end - start).toFixed(1);
+                const en = (
+                    ((getFreqPower(freq) + 50) * parseFloat(dur)) /
+                    1000
+                ).toFixed(2);
+                tip.innerHTML = `
+    <div class="tooltip-title">${name}</div>
+    <div class="tooltip-row"><span>Type</span><span class="tooltip-val">${type}</span></div>
+    <div class="tooltip-row"><span>Start</span><span class="tooltip-val">${start}ms</span></div>
+    <div class="tooltip-row"><span>End</span><span class="tooltip-val">${end}ms</span></div>
+    <div class="tooltip-row"><span>Duration</span><span class="tooltip-val">${dur}ms</span></div>
+    <div class="tooltip-row"><span>Frequency</span><span class="tooltip-val">${freq}MHz</span></div>
+    <div class="tooltip-row"><span>Energy</span><span class="tooltip-val">${en}mJ</span></div>`;
+                tip.style.left = event.clientX + 14 + "px";
+                tip.style.top = event.clientY - 10 + "px";
+                tip.classList.add("visible");
+            }
+
+            function hideTooltip() {
+                document.getElementById("tooltip").classList.remove("visible");
+            }
+
+            document.addEventListener("mousemove", (e) => {
+                const tip = document.getElementById("tooltip");
+                if (tip.classList.contains("visible")) {
+                    tip.style.left = e.clientX + 14 + "px";
+                    tip.style.top = e.clientY - 10 + "px";
+                }
+            });
+
+            // ──────────────────────────────────────────
+            //  Init
+            // ──────────────────────────────────────────
+            window.addEventListener("load", () => {
+                initSimulation();
+                renderDVFS();
+                renderCState();
+                renderEnergyChart();
+                renderArch();
+                renderAlgo();
+            });
+        </script>
+    </body>
+</html>
